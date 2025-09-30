@@ -1,0 +1,10 @@
+node_modules
+.env
+.private
+.aws/credentials
+build/contracts/BasicFaucet.json
+build/contracts/EmailRegistry.json
+build/contracts/Migrations.json
+build/contracts/PaymentManager.json
+package-lock.json
+IMP_EC2_KEY.ppk

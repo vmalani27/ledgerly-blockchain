@@ -1,0 +1,71 @@
+{
+  "name": "ledgerly",
+  "version": "1.0.0",
+  "description": "Email-based cryptocurrency payment system with MetaMask integration",
+  "main": "truffle-config.js",
+  "scripts": {
+    "compile": "truffle compile",
+    "migrate": "truffle migrate",
+    "migrate:development": "truffle migrate --network development",
+    "migrate:sepolia": "truffle migrate --network sepolia",
+    "migrate:reset": "truffle migrate --reset",
+    "console": "truffle console",
+    "test": "truffle test",
+    "ganache": "ganache --wallet.totalAccounts 10 --server.host 127.0.0.1 --server.port 8545 --wallet.deterministic --database.dbPath=./ganache-db",
+    "setup": "npm install && truffle compile",
+    "deploy": "node scripts/deploy-and-save.js",
+    "deploy:local": "cross-env NETWORK_MODE=local node scripts/deploy-and-save.js",
+    "deploy:testnet": "cross-env ENABLE_MAINNET=false node scripts/deploy-and-save.js",
+    "deploy:mainnet": "cross-env ENABLE_MAINNET=true node scripts/deploy-and-save.js",
+    "deploy:pipeline": "node scripts/deploy-pipeline.js",
+    "blockchain-server": "node scripts/blockchain-server.js",
+    "start:all": "npm-run-all --parallel blockchain-server deploy:pipeline"
+  },
+  "keywords": [
+    "blockchain",
+    "ethereum",
+    "cryptocurrency",
+    "email-payments",
+    "metamask",
+    "flutter",
+    "truffle",
+    "solidity"
+  ],
+  "author": "Ledgerly Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@truffle/hdwallet-provider": "^2.1.15",
+    "cross-env": "^10.0.0",
+    "ganache": "^7.9.1",
+    "hardhat": "^3.0.6",
+    "node-fetch": "^2.6.7",
+    "npm-run-all": "^4.1.5",
+    "truffle": "^5.11.5"
+  },
+  "dependencies": {
+    "@aws-sdk/client-kms": "^3.500.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "path": "^0.12.7",
+    "web3": "^1.10.4"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/saumyahc/Ledgerly.git"
+  },
+  "bugs": {
+    "url": "https://github.com/saumyahc/Ledgerly/issues"
+  },
+  "homepage": "https://github.com/saumyahc/Ledgerly#readme",
+  "directories": {
+    "doc": "docs",
+    "lib": "lib",
+    "test": "test"
+  },
+  "type": "commonjs"
+}

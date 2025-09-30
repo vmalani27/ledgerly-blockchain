@@ -1,0 +1,149 @@
+{
+  "info": {
+    "_postman_id": "b7e1e7c2-2025-09-26-0001-0000-0000-0000",
+    "name": "Ledgerly Blockchain Server API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Test collection for Ledgerly blockchain-server.js endpoints."
+  },
+  "item": [
+    {
+      "name": "Get Ganache Info",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3001/ganache-info",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["ganache-info"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Fund User Wallet",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"recipientAddress\": \"0x...\",\n  \"amountEth\": 1,\n  \"custodianAddress\": \"0x...\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3001/fund-user",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["fund-user"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "KMS Encrypt Private Key",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"privateKey\": \"0x...\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3001/kms/encrypt",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["kms", "encrypt"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "KMS Decrypt Private Key",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"encryptedKey\": \"<base64>\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3001/kms/decrypt",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["kms", "decrypt"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Start Ganache",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3001/start-ganache",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["start-ganache"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Stop Ganache",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3001/stop-ganache",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["stop-ganache"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Admin: List Custodian Wallets",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3001/admin/custodian-wallets",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["admin", "custodian-wallets"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Deploy Contracts (auto on startup)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3001/ganache-info",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["ganache-info"]
+        },
+        "description": "Contracts are deployed automatically on server startup. Use this to check readiness."
+      },
+      "response": []
+    }
+  ]
+}
