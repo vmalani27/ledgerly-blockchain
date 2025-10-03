@@ -1,0 +1,122 @@
+{
+  "info": {
+    "name": "Ledgerly Blockchain Middleware",
+    "description": "Test all endpoints for deploy-pipeline-clean.js",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Create Wallet",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": {{userId}}\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3001/wallet/create",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["wallet", "create"]
+        }
+      }
+    },
+    {
+      "name": "Import Wallet",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": {{userId}},\n  \"privateKey\": \"{{privateKey}}\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3001/wallet/import",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["wallet", "import"]
+        }
+      }
+    },
+    {
+      "name": "Get Wallet Balance",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3001/wallet/balance/{{walletAddress}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["wallet", "balance", "{{walletAddress}}"]
+        }
+      }
+    },
+    {
+      "name": "Check Bonus Eligibility",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3001/wallet/bonus-eligible/{{walletAddress}}",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["wallet", "bonus-eligible", "{{walletAddress}}"]
+        }
+      }
+    },
+    {
+      "name": "Faucet Funding",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"toWallet\": \"{{walletAddress}}\",\n  \"amountEth\": 1.0\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3001/payment/faucet",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["payment", "faucet"]
+        }
+      }
+    },
+    {
+      "name": "Email-to-Email Payment",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"fromEmail\": \"alice@example.com\",\n  \"toEmail\": \"bob@example.com\",\n  \"amountEth\": 0.5,\n  \"memo\": \"Test payment\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3001/payment/email-to-email",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3001",
+          "path": ["payment", "email-to-email"]
+        }
+      }
+    }
+  ],
+  "variable": [
+    { "key": "walletAddress", "value": "0xYourWalletAddressHere" },
+    { "key": "userId", "value": "123" },
+    { "key": "privateKey", "value": "0xYourPrivateKeyHere" }
+  ]
+}
