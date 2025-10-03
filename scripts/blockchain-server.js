@@ -354,65 +354,71 @@ async function deployAndRegisterContracts() {
   const accounts = await web3.eth.getAccounts();
   const deployer = accounts[0];
 
-  // Load compiled artifacts
-  const emailRegistryArtifact = require('../contracts/EmailRegistry.json');
+  // Load compiled PaymentManager artifact
   const paymentManagerArtifact = require('../contracts/PaymentManager.json');
 
-  // Deploy EmailRegistry
-  const emailRegistry = await deployContract(
-    web3,
-    emailRegistryArtifact.abi,
-    emailRegistryArtifact.bytecode,
-    [],
-    deployer
-  );
-  console.log('Deployed EmailRegistry at', emailRegistry.options.address);
-
-  // Deploy PaymentManager with EmailRegistry address
+  // Deploy PaymentManager (no constructor args)
   const paymentManager = await deployContract(
     web3,
     paymentManagerArtifact.abi,
     paymentManagerArtifact.bytecode,
-    [emailRegistry.options.address],
+    [],
     deployer
   );
   console.log('Deployed PaymentManager at', paymentManager.options.address);
 
-  // Register contracts with PHP backend
-  const chainId = await web3.eth.getChainId();
-  const saveUrl = process.env.PHP_BACKEND_URL ? `${process.env.PHP_BACKEND_URL}/save_contract.php` : 'https://ledgerly.hivizstudios.com/backend_example/save_contract.php';
-  await fetch(saveUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contract_name: 'EmailRegistry',
-      contract_address: emailRegistry.options.address,
-      chain_id: chainId,
-      abi: JSON.stringify(emailRegistryArtifact.abi),
-      deployment_tx: emailRegistry.transactionHash || null,
-      network_mode: 'local',
-      version: emailRegistryArtifact.contractVersion || 'v1.0.0',
-      deployed_at: new Date().toISOString()
-    })
-  });
-  await fetch(saveUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contract_name: 'PaymentManager',
-      contract_address: paymentManager.options.address,
-      chain_id: chainId,
-      abi: JSON.stringify(paymentManagerArtifact.abi),
-      deployment_tx: paymentManager.transactionHash || null,
-      network_mode: 'local',
-      version: paymentManagerArtifact.contractVersion || 'v1.0.0',
-      deployed_at: new Date().toISOString()
-    })
-  });
-
   // Store for later use
-  global.emailRegistry = emailRegistry;
   global.paymentManager = paymentManager;
+// PaymentManager RESTful endpoints
+app.post('/payment/send', express.json(), async (req, res) => {
+  try {
+    const { toWallet, amountEth } = req.body;
+    if (!toWallet || !amountEth) {
+      return res.status(400).json({ error: 'toWallet and amountEth required' });
+    }
+    const rpcUrl = `http://${GANACHE_HOST}:${GANACHE_PORT}`;
+    const web3 = new Web3(rpcUrl);
+    const accounts = await web3.eth.getAccounts();
+    const sender = accounts[0]; // For demo, use first account as sender
+    const amountWei = web3.utils.toWei(amountEth.toString(), 'ether');
+    const tx = await global.paymentManager.methods.sendPaymentToWallet(toWallet).send({ from: sender, value: amountWei });
+    res.json({ success: true, txHash: tx.transactionHash });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/payment/batch', express.json(), async (req, res) => {
+  try {
+    const { toWallets, amounts } = req.body;
+    if (!Array.isArray(toWallets) || !Array.isArray(amounts) || toWallets.length !== amounts.length) {
+      return res.status(400).json({ error: 'toWallets and amounts arrays required and must match in length' });
+    }
+    const rpcUrl = `http://${GANACHE_HOST}:${GANACHE_PORT}`;
+    const web3 = new Web3(rpcUrl);
+    const accounts = await web3.eth.getAccounts();
+    const sender = accounts[0];
+    const amountsWei = amounts.map(a => web3.utils.toWei(a.toString(), 'ether'));
+    const totalWei = amountsWei.reduce((acc, val) => acc + BigInt(val), BigInt(0));
+    const tx = await global.paymentManager.methods.batchPaymentToWallets(toWallets, amountsWei).send({ from: sender, value: totalWei.toString() });
+    res.json({ success: true, txHash: tx.transactionHash });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/payment/withdraw', express.json(), async (req, res) => {
+  try {
+    const rpcUrl = `http://${GANACHE_HOST}:${GANACHE_PORT}`;
+    const web3 = new Web3(rpcUrl);
+    const accounts = await web3.eth.getAccounts();
+    const owner = accounts[0];
+    const tx = await global.paymentManager.methods.withdraw().send({ from: owner });
+    res.json({ success: true, txHash: tx.transactionHash });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 }
 
 // Graceful shutdown
