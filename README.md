@@ -1,178 +1,231 @@
-# Ledgerly Blockchain Middleware Pipeline Guide
+# Ledgerly Blockchain Middleware
 
-This guide explains how the Ledgerly blockchain middleware works, how to set it up, and how to use its endpoints. It’s written for developers and testers who want to run the Node.js middleware, connect it to Ganache, and interact with the blockchain using REST APIs.
-
----
-
-## 1. What is this pipeline?
-
-- **Ledgerly Blockchain Middleware** is a Node.js server that connects to a local Ethereum blockchain (Ganache).
-- It exposes REST endpoints for wallet creation, importing, balance checks, payments, faucet funding, and more.
-- It securely stores wallet private keys (encrypted) and tracks bonus funding eligibility.
-- It integrates with a PHP backend for user mapping and transaction logging.
+This repository contains the Ledgerly Node.js middleware that manages a local development blockchain (Ganache), deploys contracts, and exposes REST endpoints for your frontend (Flutter/Web) to interact with.  
+The middleware also integrates with a PHP backend for user-wallet mapping and maintaining off-chain transaction records.
 
 ---
 
-## 2. How does it work?
+## Quick Start
 
-- **Ganache** simulates an Ethereum blockchain locally.
-- **Node.js Middleware**:
-  - Starts Ganache and deploys smart contracts (like PaymentManager).
-  - Provides endpoints for wallet management and payments.
-  - Stores wallet info and funding status in encrypted JSON files.
-  - Communicates with the PHP backend for user-wallet mapping and transaction history.
-- **Flutter/Web/Other Clients** call these endpoints to interact with the blockchain.
+1. **Create a `.env` file in the project root** (example values):
 
----
+    ```
+    GANACHE_PORT=8545
+    GANACHE_HOST=127.0.0.1
+    GANACHE_NETWORK_ID=5777
+    GANACHE_DB_PATH=./ganache-db
+    GANACHE_BALANCE=100000
+    GANACHE_ACCOUNTS=10
+    BLOCKCHAIN_SERVER_PORT=3001
+    WALLET_ENC_KEY=<64-hex-chars>
+    NETWORK_MODE=local
+    PHP_BACKEND_URL=https://ledgerly.hivizstudios.com/backend_example
+    ```
 
-## 3. How to set up
+    Generate a secure WALLET_ENC_KEY:
 
-### A. Prerequisites
+    ```sh
+    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+    ```
 
-- Node.js (v18+ recommended)
-- npm (comes with Node.js)
-- Ganache (install via npm)
-- Truffle (for contract compilation)
-- PHP backend (for user mapping and transaction logging)
+2. **Compile contracts:**
 
-### B. Install dependencies
+    ```sh
+    truffle compile
+    ```
 
-Open a terminal in your project folder and run:
+3. **Start the middleware (starts Ganache, compiles, deploys, runs Express):**
 
-```sh
-npm install express web3 crypto node-fetch dotenv
-npm install -g ganache
-npm install -g truffle
-```
+    ```sh
+    npm run dev
+    # or
+    nodemon scripts/app.js
+    # or
+    node scripts/app.js
+    ```
 
-### C. Prepare your `.env` file
-
-Create a `.env` file in your project root (see your example):
-
-```
-GANACHE_PORT=8545
-GANACHE_HOST=127.0.0.1
-GANACHE_NETWORK_ID=5777
-GANACHE_DB_PATH=./ganache-db
-GANACHE_BALANCE=100000
-GANACHE_ACCOUNTS=10
-BLOCKCHAIN_SERVER_PORT=3001
-WALLET_ENC_KEY=6f8e2b7c4d1a9e3f5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8
-```
-
-**Note:**  
-Generate a secure `WALLET_ENC_KEY` using:
-```sh
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-### D. Compile contracts
-
-```sh
-truffle compile
-```
-
-### E. Start the middleware
-
-```sh
-node scripts/deploy-pipeline-clean.js
-```
+    The server listens on `BLOCKCHAIN_SERVER_PORT` (default 3001).
 
 ---
 
-## 4. Endpoints Overview
+## REST API — Endpoints
 
-### Wallet Endpoints
+All endpoints are JSON-based. The middleware uses a PHP backend for persistent user-wallet mapping and off-chain transaction records.  
+The PHP base URL is configured via `PHP_BACKEND_URL` in `.env`.
 
-- **Create Wallet**
-  - `POST /wallet/create`
-  - Body: `{ "userId": 123 }`
-  - Returns: wallet address, funding eligibility, mapping result
+Base URL (example): `http://127.0.0.1:3001`
 
-- **Import Wallet**
-  - `POST /wallet/import`
-  - Body: `{ "userId": 123, "privateKey": "0x..." }`
-  - Returns: wallet address, funding eligibility, mapping result
+### 1) Create Wallet
 
-- **Get Wallet Balance**
-  - `GET /wallet/balance/:walletAddress`
-  - Returns: ETH balance
+- **POST** `/wallet/create`
+- **Body:** `{ "userId": 123, "userName": "Alice" }`
+- **Description:** Generates a new Ethereum account (private key encrypted and stored locally) and maps the wallet to the provided userId via the PHP backend. Returns the new address and mapping result.
+- **Example:**
+    ```sh
+    curl -X POST http://127.0.0.1:3001/wallet/create \
+      -H 'Content-Type: application/json' \
+      -d '{"userId":123,"userName":"Alice"}'
+    ```
+- **Response:**
+    ```json
+    {
+      "success": true,
+      "address": "0x...",
+      "isFundingAvailable": true,
+      "mapping": { /* PHP response */ },
+      "message": "Wallet created successfully",
+      "stored_in_nodejs": true
+    }
+    ```
+- **Notes:**  
+  - The private key is **not returned**. It is encrypted with AES-256-GCM using `WALLET_ENC_KEY` and stored in `wallet-store.json`.
 
-- **Check Bonus Eligibility**
-  - `GET /wallet/bonus-eligible/:walletAddress`
-  - Returns: `{ eligible: true/false }`
+### 2) Import Wallet
 
-- **Get Wallet Details (recommended for refresh)**
-  - `GET /wallet/details/:walletAddress`
-  - Returns: address, balance, funding eligibility
+- **POST** `/wallet/import`
+- **Body:** `{ "userId": 123, "privateKey": "0x..." }`
+- **Description:** Imports an existing wallet (e.g., Ganache account) into the encrypted wallet store and maps it to the userId via the PHP backend.
+- **Response:**
+    ```json
+    {
+      "success": true,
+      "wallet_address": "0x...",
+      "user_id": 123,
+      "message": "Wallet imported successfully"
+    }
+    ```
 
-### Payment Endpoints
+### 3) Get Wallet Balance
 
-- **Faucet Funding**
-  - `POST /payment/faucet`
-  - Body: `{ "toWallet": "0x...", "amountEth": 1.0 }`
-  - Returns: transaction hash
+- **GET** `/wallet/balance/:walletAddress`
+- **Description:** Returns ETH balance for the given address (from Ganache).
+- **Example:**
+    ```sh
+    curl http://127.0.0.1:3001/wallet/balance/0xABC...
+    ```
+- **Response:**
+    ```json
+    { "success": true, "balance": "10000" }
+    ```
 
-- **Email-to-Email Payment**
-  - `POST /payment/email-to-email`
-  - Body: `{ "fromEmail": "...", "toEmail": "...", "amountEth": 0.5, "memo": "..." }`
-  - Returns: transaction hash, status
+### 4) Check Bonus Eligibility
+
+- **GET** `/wallet/bonus-eligible/:walletAddress`
+- **Description:** Returns whether the wallet is eligible for a one-time faucet/top-up (tracked in `funded-wallets.json`).
+- **Example:**
+    ```sh
+    curl http://127.0.0.1:3001/wallet/bonus-eligible/0xABC...
+    ```
+- **Response:**
+    ```json
+    { "success": true, "eligible": true }
+    ```
+
+### 5) Faucet Funding
+
+- **POST** `/payment/faucet`
+- **Body:** `{ "toWallet": "0x...", "amountEth": 1.0 }`
+- **Description:** Sends ETH from the deployer account to `toWallet`.  
+  - Creates an off-chain transaction record in PHP.
+  - Sends the on-chain transaction using the deployed PaymentManager contract.
+  - Updates the PHP backend with the txHash and status.
+  - Polls for the receipt and updates final status.
+- **Example:**
+    ```sh
+    curl -X POST http://127.0.0.1:3001/payment/faucet \
+      -H 'Content-Type: application/json' \
+      -d '{"toWallet":"0x...","amountEth":1.0}'
+    ```
+- **Response:**
+    ```json
+    { "success": true, "txHash": "0x...", ... }
+    ```
+
+### 6) Email-to-Email Payment
+
+- **POST** `/payment/email-to-email`
+- **Body:** `{ "fromEmail": "alice@example.com", "toEmail": "bob@example.com", "amountEth": 0.5, "memo": "Payment" }`
+- **Description:** Sends ETH from the wallet mapped to `fromEmail` to the wallet mapped to `toEmail`.
+  - Resolves both emails to wallet addresses via the PHP backend.
+  - Creates off-chain transaction records for sender and receiver.
+  - Signs and sends the on-chain transaction using the sender's private key.
+  - Updates PHP backend with txHash and status.
+- **Example:**
+    ```sh
+    curl -X POST http://127.0.0.1:3001/payment/email-to-email \
+      -H 'Content-Type: application/json' \
+      -d '{"fromEmail":"alice@example.com","toEmail":"bob@example.com","amountEth":0.5,"memo":"Thanks"}'
+    ```
+- **Response:**
+    ```json
+    { "success": true, "txHash": "0x...", "status": "submitted", ... }
+    ```
+
+### 7) Wallet-to-Wallet Payment
+
+- **POST** `/payment/wallet-to-wallet`
+- **Body:** `{ "fromWallet": "0x...", "toWallet": "0x...", "amountEth": 0.5, "memo": "Transfer" }`
+- **Description:** Sends ETH from one wallet to another using the sender's private key stored in the encrypted wallet store.
+  - Creates off-chain transaction records for sender and receiver.
+  - Signs and sends the on-chain transaction.
+  - Updates PHP backend with txHash and status.
+- **Example:**
+    ```sh
+    curl -X POST http://127.0.0.1:3001/payment/wallet-to-wallet \
+      -H 'Content-Type: application/json' \
+      -d '{"fromWallet":"0x...","toWallet":"0x...","amountEth":0.5,"memo":"Transfer"}'
+    ```
+- **Response:**
+    ```json
+    { "success": true, "txHash": "0x...", "status": "submitted", ... }
+    ```
 
 ---
 
-## 5. How the pipeline flows
+## PHP Backend Expectations
 
-1. **Start Ganache**: Local blockchain is started and contracts are deployed.
-2. **Create/Import Wallet**: User requests a wallet; private key is generated/imported, encrypted, and stored. User-wallet mapping is sent to PHP backend.
-3. **Check Balance/Eligibility**: User can check wallet balance and bonus funding eligibility.
-4. **Faucet Funding**: If eligible, user can request test ETH from the faucet.
-5. **Payments**: Users can send payments (ETH) to other wallets or via email.
-6. **Transaction Logging**: All payments are logged to the PHP backend for history and analytics.
-7. **Shutdown**: Ctrl+C or server exit triggers cleanup, shutting down Ganache and Express gracefully.
+The Node middleware communicates with a PHP backend for:
+- User <-> wallet mapping (`wallet_api.php` with PUT)
+- Creating and updating off-chain transaction records (`transaction_api.php?action=webhook_update`)
+- Resolving an email to a wallet (`email_payment.php?email=...`)
 
----
-
-## 6. Debugging & Logs
-
-- All major actions print debug statements to the console (wallet creation, funding, payments, errors).
-- If Ganache DB is corrupted or missing, the middleware will warn and exit.
-- Funding eligibility and wallet info are tracked in JSON files (`funded-wallets.json`, `wallet-store.json`).
+The middleware logs full PHP responses for debugging.  
+Ensure the PHP endpoints return consistent fields (`transaction_id`, `transaction_db_id`, etc.).
 
 ---
 
-## 7. Security Notes
+## Files Used by the Middleware
 
-- Private keys are encrypted using AES-256-GCM with your `WALLET_ENC_KEY`.
-- Never share your `.env` file or wallet-store.json publicly.
-- Always use a secure, randomly generated encryption key.
-
----
-
-## 8. Testing Endpoints
-
-- Use Postman or cURL to test endpoints.
-- Example Postman collection is provided (see previous answers).
+- `wallet-store.json` — encrypted private keys and wallet addresses.
+- `funded-wallets.json` — one-time faucet tracking.
 
 ---
 
-## 9. Troubleshooting
+## Debugging Tips
 
-- If you see "Waiting for Ganache to fund deployer account...", check your Ganache DB and restart Ganache.
-- If you get "Invalid key length", check your `.env` key and ensure it's 64 hex characters.
-- For PHP backend errors, check your PHP logs and database connection.
-
----
-
-## 10. Summary
-
-Ledgerly’s pipeline lets you:
-- Run a local blockchain for development and testing.
-- Manage wallets and payments securely.
-- Integrate with backend systems for user mapping and transaction history.
-- Easily extend with new endpoints and features.
+- If an endpoint fails, check console logs for PHP response bodies and error messages.
+- Ensure `PHP_BACKEND_URL` is reachable from the machine running Node.
+- Ganache is started automatically by the middleware.
+- Use the `/wallet/import` endpoint to add Ganache accounts to your wallet store if needed.
 
 ---
 
-**Ready to get started?**  
-Just follow the setup steps, run the middleware, and start calling the endpoints!  
-Let me know if you need more details or help with integration.
+## Development
+
+- Use `nodemon` for auto-reloading during development:
+    ```sh
+    npm install --save-dev nodemon
+    npm run dev
+    ```
+    Or run directly:
+    ```sh
+    nodemon scripts/app.js
+    ```
+
+---
+
+If you want, I can also:
+- Add an endpoint to proxy and return a user's transactions by querying the PHP backend.
+- Add a Postman collection or examples directory with ready-to-run cURL requests.
+
+Let me know if you want any of those!
