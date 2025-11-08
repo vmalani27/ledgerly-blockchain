@@ -1,11 +1,23 @@
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const Web3 = require('web3');
-const fs = require('fs');
+const fs = require('fs-extra');
 const { spawn } = require('child_process');
 const express = require('express');
 const crypto = require('crypto');
-const fetch = require('node-fetch'); // Add at the top if not already imported
+const fetch = require('node-fetch');
+const HDKey = require('ethereumjs-wallet').hdkey;
+const Wallet = require('ethereumjs-wallet').default || require('ethereumjs-wallet');
+// Ganache default mnemonic
+const GANACHE_MNEMONIC = process.env.GANACHE_MNEMONIC || 'myth like bonus scare over problem client lizard pioneer submit female collect';
+
+function getDeployerPrivateKey() {
+  // Derive the first account's private key from the mnemonic
+  const hdwallet = HDKey.fromMasterSeed(require('bip39').mnemonicToSeedSync(GANACHE_MNEMONIC));
+  const walletHdPath = "m/44'/60'/0'/0/0";
+  const wallet = hdwallet.derivePath(walletHdPath).getWallet();
+  return '0x' + wallet.getPrivateKey().toString('hex');
+}
 
 // Environment variables
 const GANACHE_PORT = process.env.GANACHE_PORT || '8545';
@@ -45,35 +57,63 @@ function decrypt(encrypted) {
 }
 
 
-function startGanache() {
+async function startGanache() {
+  const dbPath = path.resolve(GANACHE_DB_PATH);
+
+  // Ensure DB directory exists
+  await fs.ensureDir(dbPath);
+
+  // Check for leftover LOCK file (unclean shutdown)
+  const lockFile = path.join(dbPath, 'LOCK');
+  if (await fs.pathExists(lockFile)) {
+    console.warn(`[GANACHE] Detected leftover LOCK file at ${lockFile}. Attempting cleanup...`);
+    try {
+      await fs.remove(lockFile);
+      console.log(`[GANACHE] Removed stale LOCK file.`);
+    } catch (err) {
+      console.error(`[GANACHE] Could not remove LOCK file: ${err.message}`);
+    }
+  }
+
+  const args = [
+    'ganache',
+    '--host', GANACHE_HOST,
+    '--port', GANACHE_PORT,
+    '--networkId', GANACHE_NETWORK_ID,
+    '--db', dbPath,
+    '--defaultBalanceEther', GANACHE_BALANCE,
+    '--accounts', GANACHE_ACCOUNTS
+  ];
+
+  console.log(`[GANACHE] Launching Ganache with persistent DB: ${dbPath}`);
+  const ganacheProcess = spawn('npx', args, { shell: true, stdio: 'inherit' });
+
+  // Graceful cleanup
+  const cleanup = async () => {
+    if (ganacheProcess && !ganacheProcess.killed) {
+      console.log('[GANACHE] Gracefully shutting down...');
+      ganacheProcess.kill('SIGINT');
+      // Give time to flush DB writes
+      await new Promise(r => setTimeout(r, 2000));
+      ganacheProcess.kill('SIGKILL');
+    }
+  };
+
+  process.on('exit', cleanup);
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
+  process.on('uncaughtException', async (err) => {
+    console.error('[GANACHE] Uncaught exception:', err);
+    await cleanup();
+    process.exit(1);
+  });
+
   return new Promise((resolve, reject) => {
-    const dbPath = path.resolve(GANACHE_DB_PATH);
-    const args = [
-      'ganache',
-      '--host', GANACHE_HOST,
-      '--port', GANACHE_PORT,
-      '--networkId', GANACHE_NETWORK_ID,
-      '--db', dbPath,
-      '--defaultBalanceEther', GANACHE_BALANCE,
-      '--accounts', GANACHE_ACCOUNTS
-    ];
-    const ganacheProcess = spawn('npx', args, { shell: true, stdio: 'inherit' });
-
-    // Kill ganache when main script exits
-    const cleanup = () => {
-      if (ganacheProcess && !ganacheProcess.killed) {
-        console.log('Shutting down Ganache...');
-        ganacheProcess.kill('SIGTERM');
-      }
-    };
-
-    process.on('exit', cleanup);
-    process.on('SIGINT', cleanup);
-    process.on('SIGTERM', cleanup);
-    process.on('uncaughtException', cleanup);
-
-    ganacheProcess.on('error', (err) => reject(err));
-    setTimeout(() => resolve(ganacheProcess), 7000);
+    ganacheProcess.on('error', reject);
+    setTimeout(() => {
+      console.log('[GANACHE] Ready and running.');
+      resolve(ganacheProcess);
+    }, 7000); // allow startup
   });
 }
 
@@ -146,6 +186,17 @@ function saveWalletStore(store) {
   }
 }
 
+// Helper function to get private key for a wallet address
+function getPrivateKeyByAddress(walletAddress) {
+  const store = loadWalletStore();
+  for (const userId in store) {
+    if (store[userId].address.toLowerCase() === walletAddress.toLowerCase()) {
+      return decrypt(store[userId].encryptedKey);
+    }
+  }
+  throw new Error(`Private key not found for wallet address: ${walletAddress}`);
+}
+
 async function main() {
   // Step 1: Start Ganache
   console.log('Starting Ganache...');
@@ -160,10 +211,16 @@ async function main() {
     process.exit(1);
   }
 
+
   // Step 3: Connect to Ganache
   const rpcUrl = `http://${GANACHE_HOST}:${GANACHE_PORT}`;
   const web3 = new Web3(rpcUrl);
   const accounts = await web3.eth.getAccounts();
+  console.log('Ganache accounts:');
+  for (let i = 0; i < accounts.length; i++) {
+    const accBalance = await web3.eth.getBalance(accounts[i]);
+    console.log(`  [${i}] ${accounts[i]} - ${web3.utils.fromWei(accBalance, 'ether')} ETH`);
+  }
   const deployer = accounts[0];
   let balance = await web3.eth.getBalance(deployer);
 
@@ -265,21 +322,38 @@ async function main() {
   app.post('/payment/faucet', async (req, res) => {
     try {
       const { toWallet, amountEth } = req.body;
+      console.log(`[FAUCET] Received request: toWallet=${toWallet}, amountEth=${amountEth}`);
       if (!web3.utils.isAddress(toWallet) || !amountEth) {
+        console.log(`[FAUCET] Invalid request params.`);
         return res.status(400).json({ error: 'toWallet and amountEth required' });
       }
       const amountWei = web3.utils.toWei(amountEth.toString(), 'ether');
+      console.log(`[FAUCET] Sending transaction: from=${deployer}, to=${toWallet}, value=${amountWei}`);
       
-      // Send ETH from deployer to user using PaymentManager contract
-      const tx = await paymentManagerInstance.methods.sendPaymentToWallet(toWallet).send({
-        from: deployer,
-        value: amountWei,
-        gas: 100000
-      });
+      // Check deployer balance before sending
+      const deployerBalance = await web3.eth.getBalance(deployer);
+      const deployerBalanceEth = web3.utils.fromWei(deployerBalance, 'ether');
+      console.log(`[FAUCET] Deployer balance: ${deployerBalanceEth} ETH`);
       
-      markWalletFunded(toWallet);
-      res.json({ success: true, txHash: tx.transactionHash });
+      try {
+        // Use web3.eth.sendTransaction directly with the deployer account
+        const txReceipt = await web3.eth.sendTransaction({
+          from: deployer,
+          to: toWallet,
+          value: amountWei,
+          gas: 100000
+        });
+
+        console.log(`[FAUCET] Transaction sent. Hash: ${txReceipt.transactionHash}`);
+        markWalletFunded(toWallet);
+        console.log(`[FAUCET] Marked wallet as funded: ${toWallet}`);
+        res.json({ success: true, txHash: txReceipt.transactionHash });
+      } catch (txErr) {
+        console.error(`[FAUCET] Transaction error: ${txErr.message}`);
+        res.status(500).json({ error: txErr.message });
+      }
     } catch (err) {
+      console.error(`[FAUCET] Error: ${err.message}`);
       res.status(500).json({ error: err.message });
     }
   });
@@ -288,41 +362,72 @@ async function main() {
   app.post('/payment/email-to-email', async (req, res) => {
     try {
       const { fromEmail, toEmail, amountEth, memo } = req.body;
+      console.log(`[EMAIL PAYMENT] Received request: fromEmail=${fromEmail}, toEmail=${toEmail}, amountEth=${amountEth}, memo=${memo}`);
       if (!fromEmail || !toEmail || !amountEth) {
+        console.log(`[EMAIL PAYMENT] Invalid request params.`);
         return res.status(400).json({ error: 'fromEmail, toEmail, and amountEth required' });
       }
 
       // 1. Get wallet addresses from PHP backend
+      console.log(`[EMAIL PAYMENT] Fetching wallet addresses for emails...`);
       const fromWallet = await getWalletByEmail(fromEmail);
       const toWallet = await getWalletByEmail(toEmail);
+      console.log(`[EMAIL PAYMENT] fromWallet=${fromWallet}, toWallet=${toWallet}`);
 
-      // 2. Initiate payment
+      // 2. Get private key for sender wallet
+      let senderPrivateKey;
+      try {
+        senderPrivateKey = getPrivateKeyByAddress(fromWallet);
+        console.log(`[EMAIL PAYMENT] Found private key for sender wallet: ${fromWallet}`);
+      } catch (err) {
+        console.error(`[EMAIL PAYMENT] Private key not found: ${err.message}`);
+        return res.status(400).json({ error: 'Sender wallet not found in local store' });
+      }
+
+      // 3. Initiate payment using signed transaction
       const amountWei = web3.utils.toWei(amountEth.toString(), 'ether');
-      const tx = await paymentManagerInstance.methods.sendPaymentFromWallet(toWallet).send({
-        from: fromWallet,
-        value: amountWei,
-        gas: 100000
-      });
+      console.log(`[EMAIL PAYMENT] Sending transaction: from=${fromWallet}, to=${toWallet}, value=${amountWei}`);
+      try {
+        // Create and sign transaction manually
+        const nonce = await web3.eth.getTransactionCount(fromWallet);
+        const gasPrice = await web3.eth.getGasPrice();
+        
+        const signedTx = await web3.eth.accounts.signTransaction({
+          nonce: nonce,
+          to: toWallet,
+          value: amountWei,
+          gas: 100000,
+          gasPrice: gasPrice
+        }, senderPrivateKey);
 
-      // 3. Update transaction status in PHP backend
-      const receipt = await web3.eth.getTransactionReceipt(tx.transactionHash);
-      const status = receipt && receipt.status ? 'completed' : 'failed';
-      await updateTransactionStatusPHP(tx.transactionHash, status, {
-        block_number: receipt ? receipt.blockNumber : null,
-        block_hash: receipt ? receipt.blockHash : null,
-        transaction_index: receipt ? receipt.transactionIndex : null,
-        gas_used: receipt ? receipt.gasUsed : null,
-        blockchain_timestamp: receipt ? (await web3.eth.getBlock(receipt.blockNumber)).timestamp : null,
-        error_message: receipt && !receipt.status ? 'Transaction failed' : null
-      });
+        const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+        console.log(`[EMAIL PAYMENT] Transaction sent. Hash: ${receipt.transactionHash}`);
 
-      // 4. Return status to user
-      res.json({
-        success: true,
-        txHash: tx.transactionHash,
-        status
-      });
+        // 4. Update transaction status in PHP backend
+        const status = receipt && receipt.status ? 'completed' : 'failed';
+        console.log(`[EMAIL PAYMENT] Transaction status: ${status}`);
+        await updateTransactionStatusPHP(receipt.transactionHash, status, {
+          block_number: receipt ? receipt.blockNumber : null,
+          block_hash: receipt ? receipt.blockHash : null,
+          transaction_index: receipt ? receipt.transactionIndex : null,
+          gas_used: receipt ? receipt.gasUsed : null,
+          blockchain_timestamp: receipt ? (await web3.eth.getBlock(receipt.blockNumber)).timestamp : null,
+          error_message: receipt && !receipt.status ? 'Transaction failed' : null
+        });
+        console.log(`[EMAIL PAYMENT] Transaction status updated in PHP backend.`);
+
+        // 5. Return status to user
+        res.json({
+          success: true,
+          txHash: receipt.transactionHash,
+          status
+        });
+      } catch (txErr) {
+        console.error(`[EMAIL PAYMENT] Transaction error: ${txErr.message}`);
+        res.status(500).json({ error: txErr.message });
+      }
     } catch (err) {
+      console.error(`[EMAIL PAYMENT] Error: ${err.message}`);
       res.status(500).json({ error: err.message });
     }
   });
@@ -410,15 +515,34 @@ function cleanup() {
     console.log('Shutting down Ganache...');
     ganacheProcess.kill('SIGTERM');
   }
-  if (expressServer) {
-    console.log('Shutting down Express server...');
-    expressServer.close(() => {
-      console.log('Express server closed.');
-      process.exit(0);
+
+  // Wait briefly to allow Ganache to exit and flush DB
+  setTimeout(() => {
+    // Remove lock files if Ganache is not running
+    const lockFiles = ['LOCK', 'CURRENT'];
+    const dbPath = path.resolve(GANACHE_DB_PATH);
+    lockFiles.forEach(file => {
+      const filePath = path.join(dbPath, file);
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+          console.log(`Removed Ganache DB lock file: ${filePath}`);
+        } catch (err) {
+          console.warn(`Failed to remove lock file ${filePath}: ${err.message}`);
+        }
+      }
     });
-  } else {
-    process.exit(0);
-  }
+
+    if (expressServer) {
+      console.log('Shutting down Express server...');
+      expressServer.close(() => {
+        console.log('Express server closed.');
+        process.exit(0);
+      });
+    } else {
+      process.exit(0);
+    }
+  }, 1000); // 1 second delay for safety
 }
 
 // Start the application

@@ -19,7 +19,9 @@
     "deploy:mainnet": "cross-env ENABLE_MAINNET=true node scripts/deploy-and-save.js",
     "deploy:pipeline": "node scripts/deploy-pipeline.js",
     "blockchain-server": "node scripts/blockchain-server.js",
-    "start:all": "npm-run-all --parallel blockchain-server deploy:pipeline"
+    "start:all": "npm-run-all --parallel blockchain-server deploy:pipeline",
+    "dev": "nodemon scripts/deploy-pipeline-clean.js",
+    "start:blockchain": "nodemon scripts/deploy-pipeline-clean.js"
   },
   "keywords": [
     "blockchain",
@@ -44,9 +46,12 @@
   },
   "dependencies": {
     "@aws-sdk/client-kms": "^3.500.0",
+    "bip39": "^3.1.0",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
+    "ethereumjs-wallet": "^1.0.2",
     "express": "^4.21.2",
+    "nodemon": "^3.1.10",
     "path": "^0.12.7",
     "web3": "^1.10.4"
   },
