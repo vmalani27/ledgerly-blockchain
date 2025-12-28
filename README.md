@@ -4,6 +4,7 @@ This repository contains the Ledgerly Node.js middleware that manages a local de
 The middleware also integrates with a PHP backend for user-wallet mapping and maintaining off-chain transaction records.
 
 ---
+ganache \ --wallet.seed "test test test test test test test test test test test junk" \ --miner.blockTime 0 \ --database.dbPath ./chainData \ --chain.networkId 1337 \ --server.port 8545
 
 ## Quick Start
 

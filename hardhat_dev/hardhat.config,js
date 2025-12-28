@@ -1,0 +1,30 @@
+require("@nomicfoundation/hardhat-toolbox");
+
+const { SSMClient, GetParameterCommand } = require("@aws-sdk/client-ssm");
+
+async function loadKey() {
+  const ssm = new SSMClient({ region: "us-east-1" });
+
+  const res = await ssm.send(
+    new GetParameterCommand({
+      Name: "/myapp/ganache/deployerKey",
+      WithDecryption: true
+    })
+  );
+
+  return res.Parameter.Value;
+}
+
+module.exports = {
+  solidity: "0.8.28",
+  networks: {
+    ganache: {
+      url: "http://127.0.0.1:8545",
+      accounts: async () => {
+        const key = await loadKey();
+        return [key];
+      },
+      chainId: 1337
+    }
+  }
+};

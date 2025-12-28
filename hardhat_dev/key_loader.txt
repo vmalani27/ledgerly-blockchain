@@ -1,0 +1,14 @@
+import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
+
+const ssm = new SSMClient({ region: "us-east-1" });
+
+export async function getPrivateKey() {
+  const res = await ssm.send(
+    new GetParameterCommand({
+      Name: "/myapp/ganache/deployerKey",
+      WithDecryption: true
+    })
+  );
+
+  return res.Parameter.Value;
+}

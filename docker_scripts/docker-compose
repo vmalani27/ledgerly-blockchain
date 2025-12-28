@@ -1,0 +1,17 @@
+# Use Node.js base
+FROM node:18-alpine
+
+# Install Ganache globally
+RUN npm install -g ganache
+
+# Expose Ganache RPC port
+EXPOSE 8545
+
+# Default command to start Ganache
+CMD [ \
+  "ganache", \
+  "--wallet.seed", "episode dwarf catalog pitch end cloth pluck ghost assist tip exchange curious", \
+  "--chain.networkId", "1337", \
+  "--server.port", "8545", \
+  "--database.dbPath", "/data/chainData" \
+]
